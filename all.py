@@ -39,21 +39,21 @@ nltk.download('stopwords')
 nltk.download('punkt')
 
 def removeWords(phrases, options):
-    print("Initial")
-    print(phrases)
+    # print("Initial")
+    # print(phrases)
     if ("link" in options):
         phrases = [re.sub(
             r'''(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))''',
             " ", phrase) for phrase in phrases]
-        print("After link")
-        print(phrases)
+        # print("After link")
+        # print(phrases)
     if "symbol" in options:
         whitelist = string.ascii_letters + string.digits + ' '
         symbolRemoved = []
         for phrase in phrases:
             phrase1 = ''.join(list(map(lambda cha: cha if cha in whitelist else ' ', phrase)))
             symbolRemoved.append(phrase1)
-        print("After symbol removal")
+        # print("After symbol removal")
 
         phrases = symbolRemoved
         print(phrases)
@@ -64,14 +64,14 @@ def removeWords(phrases, options):
         stop_words = set(stopwords.words('english'))  # get set of stopwords
         filtered = list(map(lambda phrase: [w for w in phrase if w not in stop_words],
                             tokenized))  # remove words that appear in the stopwords set
-        print("After stopword removal")
+        # print("After stopword removal")
 
         tokenized = filtered
         # phrases=''.join(filtered)
         phrases = [' '.join(x) for x in filtered]
         print(phrases)
     return phrases
-    print("Done")
+
 
 
 
@@ -280,7 +280,33 @@ def find_repetitions(filename):
                 else:
                     d[w] = 1
     return no_repetitions
+def printConfusion(results,true_labels,testName):
+    print("The confusion matrix for test {} is".format(testName))
 
+    print(confusion_matrix(true_labels, results))
+
+def doStatistics(classifiers,classifierLabels,samples,true_labels,testName):
+    print("Currently running test {}".format(testName))
+    for index,classifier in enumerate(classifiers):
+        results=classifier.predict(samples)
+        print("Data for {} classifier".format(classifierLabels[index]))
+        printConfusion(results,true_labels,testName)
+    majority_voting(classifiers,classifierLabels,samples,true_labels);
+def run_with_filter(train_dir,test_dir,classifierArray,classifierLabels,filters,feature_extractor):
+    train_labels = np.ones(20)
+    train_labels[0:9] = 0
+    dictionary = make_Dictionary(train_dir)
+
+    train_matrix = feature_extractor(train_dir, dictionary, filters)
+
+    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+
+    # Test the unseen mails for Spam
+    test_matrix = feature_extractor(test_dir, dictionary, filters)
+    test_labels = np.ones(20)
+    test_labels[0:9] = 0
+    majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 def main():
 
     # Create classifiers
@@ -289,6 +315,10 @@ def main():
     model2 = LinearSVC()
     model3 = tree.DecisionTreeClassifier()
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
+
+
+
+
     # Add them to a list
     classifierArray = [model1, model2, model3, model4]
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
@@ -297,28 +327,14 @@ def main():
     # Directory selection
     train_dir = 'Datasets/ling-spam/train-mails'
     test_dir = './Datasets/ling-spam/test-mails/'
-    filters = ["stopword"]
+
 
     # Prepare feature vectors per training mail and its labels
 
-    train_labels = np.ones(20)
-    train_labels[0:9] = 0
-    dictionary = make_Dictionary(train_dir)
 
-    train_matrix = extract_features(train_dir, dictionary, filters)
+    filters = ["stopword"]
+    run_with_filter(train_dir,test_dir,classifierArray,classifierLabels,filters,extract_features)
 
-    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-
-    # Test the unseen mails for Spam
-    test_matrix = extract_features(test_dir, dictionary, filters)
-    test_labels = np.ones(20)
-    test_labels[0:9] = 0
-    result1 = model1.predict(test_matrix)
-    result2 = model2.predict(test_matrix)
-    print(confusion_matrix(test_labels, result1))
-    print(confusion_matrix(test_labels, result2))
-    majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
-
-
+main()
 DATASET_DIR = "./Dataset/Enron_PRE/"
 
