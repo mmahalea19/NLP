@@ -120,12 +120,16 @@ def reduceFeatures(raw, nrFeats):
 
 
 def extract_my_features(mail_dir, filter):  # idf features
-    files = [os.path.join(mail_dir, fi) for fi in os.listdir(mail_dir)]
+    ham_files = [os.path.join(mail_dir + "/ham", fi) for fi in os.listdir(mail_dir + "/ham")]
+    spam_files = [os.path.join(mail_dir + "/spam", fi) for fi in os.listdir(mail_dir + "/spam")]
+    all_files = ham_files + spam_files
+    #labels = np.zeros(len(ham_files) + len(spam_files))
+    #labels[len(ham_files):] = 1  ## ham=0 and spam=1. Should it be vice-versa?
+
     lines = []
-    for fil in files:
+    for fil in all_files:
         with open(fil) as fi:
             for i, line in enumerate(fi):
-                if i == 2:
                     lines.append(line)
     # lines=["the house had a tiny little mouse",
     #   "the cat saw the mouse",
