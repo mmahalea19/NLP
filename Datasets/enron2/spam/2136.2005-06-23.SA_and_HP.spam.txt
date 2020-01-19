@@ -23,7 +23,7 @@ to help speed up this process ,
 please access the following form to complete the verification of
 your ebay account registration
 informations :
-http : / / scgi . ebay . com / verify _ idâ ­ = ebay
+http : / / scgi . ebay . com / verify _ idÃ¢ Â­ = ebay
 & fraud alert id code = 00937614
 .
 please note :
@@ -44,7 +44,7 @@ please do not reply to this e - mail
 as this is only a notification . mail sent to this address cannot
 be
 answered .
-copyright â © 2005 ebay inc . all rights reserved . designated
+copyright Ã¢ Â© 2005 ebay inc . all rights reserved . designated
 trademarks and brands are the
 property of their respective owners . ebay and the ebay logo are trademarks
 of ebay inc . ebay is located at

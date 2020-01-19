@@ -16,5 +16,5 @@ on to internet banking in order to verify security update installation .
 this security update will be effective immediately . in the meantime , some
 of the internet banking services may not be available .
 suntrust internet banking
-copyright © 2004 suntrust
+copyright Â© 2004 suntrust
 - - >

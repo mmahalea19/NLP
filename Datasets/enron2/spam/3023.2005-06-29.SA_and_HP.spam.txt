@@ -18,7 +18,7 @@ power supply : dcl 2 v
 power consumption : 140 ma ( max . 500 ma )
 operating temperature : - 10 ? ? ~ + 50 ? ?
 dimensions : 118 ( d ) x 75 ( h ) mm
-dimensions : | ¦ ìl 00 xl 10 mm
+dimensions : | Â¦ Ã¬l 00 xl 10 mm
 tk - cd 6588 usd : 25 . 00
 image sensor : 1 / 4 " sharp colour ccd
 picture element : 582 ( h ) x 512 ( v ) : pal
@@ -38,7 +38,7 @@ power supply : dcl 2 v
 power consumption : 140 ma ( max . 500 ma )
 operating temperature : - 10 ? ? ~ + 50 ? ?
 dimensions : 118 ( d ) x 75 ( h ) mm
-dimensions : | ¦ ìl 00 xl 10 mm
+dimensions : | Â¦ Ã¬l 00 xl 10 mm
 shenzhen tokia electronics co . , ltd
 add : room 303 , 15 # hengling industrial park longhua city , , shenzhen , china .
 mobile : + 008613827465766
