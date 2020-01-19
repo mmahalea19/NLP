@@ -56,7 +56,7 @@ def removeWords(phrases, options):
         # print("After symbol removal")
 
         phrases = symbolRemoved
-        print(phrases)
+        #print(phrases)
 
     tokenized = [word_tokenize(phrase) for phrase in phrases]  # split in individual words
     # print(tokenized)
@@ -69,29 +69,34 @@ def removeWords(phrases, options):
         tokenized = filtered
         # phrases=''.join(filtered)
         phrases = [' '.join(x) for x in filtered]
-        print(phrases)
+        #print(phrases)
     return phrases
 
 
-
-
-
 def make_Dictionary(train_dir):
-    emails = [os.path.join(train_dir, f) for f in os.listdir(train_dir)]
+    ham_emails = [os.path.join(train_dir + "/ham", f) for f in os.listdir(train_dir + "/ham")]
+    spam_emails = [os.path.join(train_dir + "/spam", f) for f in os.listdir(train_dir + "/spam")]
     all_words = []
-    for mail in emails:
+    for mail in ham_emails:
         with open(mail) as m:
             for i, line in enumerate(m):
-                if i == 2:  # Body of email is only 3rd line of text file
-                    words = line.split()
-                    all_words += words
+                #  if i == 2:  # Body of email is only 3rd line of text file. Available for ling-spam only!!!
+                words = line.split()
+                all_words += words
+
+    for mail in spam_emails:
+        with open(mail) as m:
+            for i, line in enumerate(m):
+                #  if i == 2:  # Body of email is only 3rd line of text file. Available for ling-spam only!!!
+                words = line.split()
+                all_words += words
 
     dictionary1 = Counter(all_words)
     # Paste code for non-word removal here(code snippet is given below)
     list_to_remove = list(dictionary1)
 
     for item in list_to_remove:
-        if item.isalpha() == False:
+        if not item.isalpha():
             del dictionary1[item]
         elif len(item) == 1:
             del dictionary1[item]
@@ -154,27 +159,30 @@ def LDA_PCA(raw, option, nr_components, labels=None):
 
 
 def extract_features(mail_dir, dictio, filter):  # based of number of occurences of words from dictionary
-    files = [os.path.join(mail_dir, fi) for fi in os.listdir(mail_dir)]
-    features_matrix = np.zeros((len(files), 3000))
-    docID = 0;
 
-    for fil in files:
+    ham_files = [os.path.join(mail_dir + "/ham", fi) for fi in os.listdir(mail_dir + "/ham")]
+    spam_files = [os.path.join(mail_dir + "/spam", fi) for fi in os.listdir(mail_dir + "/spam")]
+    features_matrix = np.zeros((len(ham_files) + len(spam_files), 3000))
+    labels = np.zeros(len(ham_files) + len(spam_files))
+    labels[len(ham_files):] = 1 ## ham=0 and spam=1. Should it be vice-versa?
+    all_files = ham_files + spam_files
+    docID = 0
+    for fil in all_files:
         with open(fil) as fi:
             content = fi.read().splitlines()
-
             content = removeWords(content, filter)
 
-            for i, line in enumerate(content):
-                if i == 2:
-                    words = line.split()
-                    for word in words:
+            for line in content:
+                #if i == 2:
+                words = line.split()
+                for word in words:
+                    for i, d in enumerate(dictio):
+                        if d[0] == word:
+                            wordID = i
+                            features_matrix[docID, wordID] = words.count(word)
 
-                        for i, d in enumerate(dictio):
-                            if d[0] == word:
-                                wordID = i
-                                features_matrix[docID, wordID] = words.count(word)
             docID = docID + 1
-    return features_matrix
+    return features_matrix, labels
 
 
 # Training SVM and Naive bayes classifier
@@ -280,33 +288,36 @@ def find_repetitions(filename):
                 else:
                     d[w] = 1
     return no_repetitions
-def printConfusion(results,true_labels,testName):
+
+
+def printConfusion(results, true_labels, testName):
     print("The confusion matrix for test {} is".format(testName))
 
     print(confusion_matrix(true_labels, results))
 
-def doStatistics(classifiers,classifierLabels,samples,true_labels,testName):
+
+def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     print("Currently running test {}".format(testName))
-    for index,classifier in enumerate(classifiers):
-        results=classifier.predict(samples)
+    for index, classifier in enumerate(classifiers):
+        results = classifier.predict(samples)
         print("Data for {} classifier".format(classifierLabels[index]))
-        printConfusion(results,true_labels,testName)
-    majority_voting(classifiers,classifierLabels,samples,true_labels);
-def run_with_filter(train_dir,test_dir,classifierArray,classifierLabels,filters,feature_extractor):
-    train_labels = np.ones(20)
-    train_labels[0:9] = 0
+        printConfusion(results, true_labels, testName)
+    majority_voting(classifiers, classifierLabels, samples, true_labels)
+
+
+def run_with_filter(train_dir, test_dir, classifierArray, classifierLabels, filters, feature_extractor):
     dictionary = make_Dictionary(train_dir)
 
-    train_matrix = feature_extractor(train_dir, dictionary, filters)
+    [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
     # Test the unseen mails for Spam
-    test_matrix = feature_extractor(test_dir, dictionary, filters)
-    test_labels = np.ones(20)
-    test_labels[0:9] = 0
-    majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+    [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
+    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+
+
 def main():
 
     # Create classifiers
@@ -316,25 +327,19 @@ def main():
     model3 = tree.DecisionTreeClassifier()
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
 
-
-
-
     # Add them to a list
     classifierArray = [model1, model2, model3, model4]
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
 
-
     # Directory selection
-    train_dir = 'Datasets/ling-spam/train-mails'
-    test_dir = './Datasets/ling-spam/test-mails/'
-
+    train_dir = 'Datasets/enron1'
+    test_dir = './Datasets/enron2'
 
     # Prepare feature vectors per training mail and its labels
 
-
     filters = ["stopword"]
-    run_with_filter(train_dir,test_dir,classifierArray,classifierLabels,filters,extract_features)
+    run_with_filter(train_dir, test_dir, classifierArray, classifierLabels, filters, extract_features)
+
 
 main()
-DATASET_DIR = "./Dataset/Enron_PRE/"
 
