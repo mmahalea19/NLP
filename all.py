@@ -119,10 +119,9 @@ def reduceFeatures(raw, nrFeats):
     return raw
 
 
-def extract_my_features(mail_dir, filter):  # idf features
-    ham_files = [os.path.join(mail_dir + "/ham", fi) for fi in os.listdir(mail_dir + "/ham")]
-    spam_files = [os.path.join(mail_dir + "/spam", fi) for fi in os.listdir(mail_dir + "/spam")]
-    all_files = ham_files + spam_files
+def extract_idf_features(mail_dir, filter):  # idf features
+
+    all_files ,true_labels=get_ham_spam_files(mail_dir)
     #labels = np.zeros(len(ham_files) + len(spam_files))
     #labels[len(ham_files):] = 1  ## ham=0 and spam=1. Should it be vice-versa?
 
@@ -161,15 +160,19 @@ def LDA_PCA(raw, option, nr_components, labels=None):
         x_lda = lda.fit_transform(raw, labels)
         return x_lda
 
-
-def extract_features(mail_dir, dictio, filter):  # based of number of occurences of words from dictionary
+def get_ham_spam_files(mail_dir):
 
     ham_files = [os.path.join(mail_dir + "/ham", fi) for fi in os.listdir(mail_dir + "/ham")]
     spam_files = [os.path.join(mail_dir + "/spam", fi) for fi in os.listdir(mail_dir + "/spam")]
-    features_matrix = np.zeros((len(ham_files) + len(spam_files), 3000))
     labels = np.zeros(len(ham_files) + len(spam_files))
-    labels[len(ham_files):] = 1 ## ham=0 and spam=1. Should it be vice-versa?
+    labels[len(ham_files):] = 1  ## ham=0 and spam=1. Should it be vice-versa?
     all_files = ham_files + spam_files
+    return all_files,labels
+def extract_features(mail_dir, dictio, filter):  # based of number of occurences of words from dictionary
+
+    all_files,true_labels=get_ham_spam_files(mail_dir)
+    features_matrix = np.zeros((len(all_files), 3000))
+
     docID = 0
     for fil in all_files:
         with open(fil) as fi:
@@ -186,7 +189,7 @@ def extract_features(mail_dir, dictio, filter):  # based of number of occurences
                             features_matrix[docID, wordID] = words.count(word)
 
             docID = docID + 1
-    return features_matrix, labels
+    return features_matrix, true_labels
 
 
 # Training SVM and Naive bayes classifier
@@ -206,10 +209,16 @@ def majority_voting(classifiers, classifier_labels, sample, true_labels):
             i[2]].predict(sample);
         final_result = np.round(majority_vote / k);
         results.append(final_result)
+        conf_mat = confusion_matrix(true_labels, final_result)
+
+
+
         print(
-            "The final result for the classifiers {}|{}|{}={}".format(classifier_labels[i[0]], classifier_labels[i[1]],
+            "The final result for the classifiers {}|{}|{}=\n{}".format(classifier_labels[i[0]], classifier_labels[i[1]],
                                                                       classifier_labels[i[2]],
-                                                                      confusion_matrix(true_labels, final_result)))
+                                                                        conf_mat ))
+        print("The acc. is {}".format((conf_mat[0][0] + conf_mat[1][1]) / conf_mat.sum()))
+
 
 
 def find_urls(filename):
@@ -296,8 +305,9 @@ def find_repetitions(filename):
 
 def printConfusion(results, true_labels, testName):
     print("The confusion matrix for test {} is".format(testName))
-
-    print(confusion_matrix(true_labels, results))
+    conf_mat=confusion_matrix(true_labels, results)
+    print(conf_mat)
+    print("The acc. is {}".format((conf_mat[0][0]+conf_mat[1][1])/conf_mat.sum()))
 
 
 def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
@@ -309,40 +319,84 @@ def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     majority_voting(classifiers, classifierLabels, samples, true_labels)
 
 
-def run_with_filter(train_dir, test_dir, classifierArray, classifierLabels, filters, feature_extractor):
-    dictionary = make_Dictionary(train_dir)
-
-    [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
-
-    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-
-    # Test the unseen mails for Spam
-    [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
-    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
-    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
-
-
-def main():
-
-    # Create classifiers
-
+def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures):
     model1 = MultinomialNB()
     model2 = LinearSVC()
     model3 = tree.DecisionTreeClassifier()
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
 
-    # Add them to a list
     classifierArray = [model1, model2, model3, model4]
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    dictionary = make_Dictionary(train_dir)
+
+    [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
+    train_matrix=reduceFeatures(train_matrix,nrfeatures)
+    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+
+    # Test the unseen mails for Spam
+    [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
+    test_matrix=reduceFeatures(test_matrix,nrfeatures)
+    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+
+def run_with_new_features(train_dir, test_dir):
+    model1 = MultinomialNB()
+    model2 = LinearSVC()
+    model3 = tree.DecisionTreeClassifier()
+    model4 = RandomForestClassifier(max_depth=2, random_state=0)
+
+    classifierArray = [model1, model2, model3, model4]
+    classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    dictionary = make_Dictionary(train_dir)
+    train_files, train_labels = get_ham_spam_files(train_dir)
+    train_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns(file)] for file in train_files]
+
+    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+
+    # Test the unseen mails for Spam
+    [test_files, test_labels] = get_ham_spam_files(test_dir)
+    test_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns(file)] for file in test_files]
+    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+def main():
+
+    # Create classifiers
+
+    nltk.download('averaged_perceptron_tagger')
+    nltk.download('maxent_ne_chunker')
+    # Add them to a list
+    nltk.download('words')
 
     # Directory selection
-    train_dir = 'Datasets/enron1'
+    train_dir = './Datasets/enron1'
     test_dir = './Datasets/enron2'
 
     # Prepare feature vectors per training mail and its labels
 
-    filters = ["stopword"]
-    run_with_filter(train_dir, test_dir, classifierArray, classifierLabels, filters, extract_features)
+    # filters=[]
+    # run_with_filter(train_dir, test_dir,  filters, extract_features,3000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_features,2000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_features,1000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_features,500)
+    # filters = ["stopword"]
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 3000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 2000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 1000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 500)
+    # filters = ["link"]
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 3000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 2000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 1000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 500)
+    # filters = ["symbol"]
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 3000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 2000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 1000)
+    # run_with_filter(train_dir, test_dir, filters, extract_features, 500)
+
+    run_with_new_features(train_dir,test_dir)
+
+
 
 
 main()
