@@ -286,13 +286,23 @@ def find_pronouns(filename):
                 if 'PRP' in w[1]:
                     no_pronouns += 1
     return no_pronouns
+from collections import Counter
+def find_pronouns2(filename):
+    no_pronouns = 0
+    with open(filename) as fi:
+        contet=fi.read()
 
-
+        tokens = nltk.word_tokenize(contet.lower())
+        text = nltk.Text(tokens)
+        tags = nltk.pos_tag(text)
+        counts = Counter(tag for word, tag in tags)
+        print(1)
 def find_repetitions(filename):
     no_repetitions = 0
     tknzr = TweetTokenizer()
     d = dict()
     with open(filename) as fi:
+
         for i, line in enumerate(fi):
             line_tok = tknzr.tokenize(line)
             for w in line_tok:
@@ -349,7 +359,7 @@ def run_with_new_features(train_dir, test_dir):
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
     dictionary = make_Dictionary(train_dir)
     train_files, train_labels = get_ham_spam_files(train_dir)
-    train_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns(file)] for file in train_files]
+    train_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns2(file)] for file in train_files]
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
