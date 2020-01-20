@@ -33,6 +33,7 @@ from spellchecker import SpellChecker
 from nltk.tokenize import TweetTokenizer
 import nltk
 from textblob import TextBlob
+import time
 
 
 nltk.download('stopwords')
@@ -220,17 +221,17 @@ def majority_voting(classifiers, classifier_labels, sample, true_labels):
         print("The acc. is {}".format((conf_mat[0][0] + conf_mat[1][1]) / conf_mat.sum()))
 
 
-
 def find_urls(filename):
     no_url = 0
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-            ## curently we accept spaces between http : //. Correct or not?
-            url = re.findall('http[s]?\s?:\s?/',
-                             line)  # 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+] |[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
-            if len(url) != 0:
-                no_url += 1
+    for i, line in enumerate(filename):
+        ## curently we accept spaces between http : //. Correct or not?
+        url = re.findall('http[s]?\s?:\s?/',
+                         line)  # 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+] |[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+        if len(url) != 0:
+            no_url += 1
     return no_url
+
+
 import pkg_resources
 from symspellpy import SymSpell, Verbosity
 sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
@@ -246,8 +247,6 @@ def find_mistakes2(filename):
     no_mistakes = 0
     tknzr = TweetTokenizer()
 
-    import pkg_resources
-    from symspellpy import SymSpell, Verbosity
     with open(filename) as fi:
         for i, line in enumerate(fi):
 
@@ -256,58 +255,57 @@ def find_mistakes2(filename):
             no_mistakes+=suggestions[0].distance;
     return no_mistakes
 
+
 def find_mistakes(filename):
     spell = SpellChecker()
     tknzr = TweetTokenizer()
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-            line_tok = tknzr.tokenize(line)
-            for w in line_tok:
-                correction = spell.correction(w)
-                if correction == w:
-                    no_mistakes += 1
+    no_mistakes = 0
+    for i, line in enumerate(filename):
+        line_tok = tknzr.tokenize(line)
+        for w in line_tok:
+            correction = spell.correction(w)
+            if correction == w:
+                no_mistakes += 1
     return no_mistakes
 
 
 def find_words(filename):
     no_words = 0
     tknzr = TweetTokenizer()
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-            line_tok = tknzr.tokenize(line)
-            no_words += len(line_tok)
+    for i, line in enumerate(filename):
+        line_tok = tknzr.tokenize(line)
+        no_words += len(line_tok)
     return no_words
 
 
 def find_entities(filename):
     no_entities = 0
     tknzr = TweetTokenizer()
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-            line_tok = tknzr.tokenize(line)
-            ne_tree = nltk.ne_chunk(nltk.pos_tag(line_tok), binary=True)
-            named_entities = []
-            for tagged_tree in ne_tree:
-                if hasattr(tagged_tree, 'label'):
-                    entity_name = ' '.join(c[0] for c in tagged_tree.leaves())  #
-                    entity_type = tagged_tree.label()  # get NE category
-                    named_entities.append((entity_name, entity_type))
+    for i, line in enumerate(filename):
+        line_tok = tknzr.tokenize(line)
+        ne_tree = nltk.ne_chunk(nltk.pos_tag(line_tok), binary=True)
+        named_entities = []
+        for tagged_tree in ne_tree:
+            if hasattr(tagged_tree, 'label'):
+                entity_name = ' '.join(c[0] for c in tagged_tree.leaves())  #
+                entity_type = tagged_tree.label()  # get NE category
+                named_entities.append((entity_name, entity_type))
 
-            no_entities += len(named_entities)
+        no_entities += len(named_entities)
     return no_entities
 
 
 def find_pronouns(filename):
     no_pronouns = 0
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-            blob = TextBlob(line)
-            blob.parse()
-            for w in blob.tags:
-                print(w[1])
-                if 'PRP' in w[1]:
-                    no_pronouns += 1
+    for i, line in enumerate(filename):
+        blob = TextBlob(line)
+        blob.parse()
+        for w in blob.tags:
+            if 'PRP' in w[1]:
+                no_pronouns += 1
     return no_pronouns
+
+
 from collections import Counter
 def find_pronouns2(filename):
     no_pronouns = 0
@@ -319,19 +317,19 @@ def find_pronouns2(filename):
         tags = nltk.pos_tag(text)
         counts = Counter(tag for word, tag in tags)
         print(1)
+
+
 def find_repetitions(filename):
     no_repetitions = 0
     tknzr = TweetTokenizer()
     d = dict()
-    with open(filename) as fi:
-
-        for i, line in enumerate(fi):
-            line_tok = tknzr.tokenize(line)
-            for w in line_tok:
-                if w in d:
-                    no_repetitions += 1
-                else:
-                    d[w] = 1
+    for i, line in enumerate(filename):
+        line_tok = tknzr.tokenize(line)
+        for w in line_tok:
+            if w in d:
+                no_repetitions += 1
+            else:
+                d[w] = 1
     return no_repetitions
 
 
@@ -379,15 +377,24 @@ def run_with_new_features(train_dir, test_dir):
 
     classifierArray = [model1, model2, model3, model4]
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
-    dictionary = make_Dictionary(train_dir)
     train_files, train_labels = get_ham_spam_files(train_dir)
-    train_matrix = [[find_urls(file),find_mistakes2(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns2(file)] for file in train_files]
+    #train_matrix = [[find_urls(file), find_mistakes(file), find_words(file),
+    #                 find_entities(file), find_repetitions(file), find_pronouns(file)] for file in train_files]
+    train_matrix = []
+    for file in train_files:
+        with open(file) as fi:
+            train_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
+                     find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
     # Test the unseen mails for Spam
     [test_files, test_labels] = get_ham_spam_files(test_dir)
-    test_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns(file)] for file in test_files]
+    test_matrix = []
+    for file in test_files:
+        with open(file) as fi:
+            test_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
+                     find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 def main():
@@ -426,9 +433,13 @@ def main():
     # run_with_filter(train_dir, test_dir, filters, extract_features, 1000)
     # run_with_filter(train_dir, test_dir, filters, extract_features, 500)
 
-    run_with_new_features(train_dir,test_dir)
+    #start = time.time()
 
+    run_with_new_features(train_dir, test_dir)
 
+    #end = time.time()
+    #time_elapsed = end - start
+    #print("Elapsed time: " + str(time_elapsed))
 
 
 main()
