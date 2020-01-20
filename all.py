@@ -161,6 +161,7 @@ def LDA_PCA(raw, option, nr_components, labels=None):
         x_lda = lda.fit_transform(raw, labels)
         return x_lda
 
+
 def get_ham_spam_files(mail_dir):
 
     ham_files = [os.path.join(mail_dir + "/ham", fi) for fi in os.listdir(mail_dir + "/ham")]
@@ -168,7 +169,9 @@ def get_ham_spam_files(mail_dir):
     labels = np.zeros(len(ham_files) + len(spam_files))
     labels[len(ham_files):] = 1  ## ham=0 and spam=1. Should it be vice-versa?
     all_files = ham_files + spam_files
-    return all_files,labels
+    return all_files, labels
+
+
 def extract_features(mail_dir, dictio, filter):  # based of number of occurences of words from dictionary
 
     all_files,true_labels=get_ham_spam_files(mail_dir)
@@ -222,6 +225,7 @@ def majority_voting(classifiers, classifier_labels, sample, true_labels):
 
 
 def find_urls(filename):
+    filename.seek(0)
     no_url = 0
     for i, line in enumerate(filename):
         ## curently we accept spaces between http : //. Correct or not?
@@ -252,11 +256,12 @@ def find_mistakes2(filename):
 
             suggestions = sym_spell.lookup_compound(line, max_edit_distance=2, transfer_casing=True)
             print(suggestions)
-            no_mistakes+=suggestions[0].distance;
+            no_mistakes+=suggestions[0].distance
     return no_mistakes
 
 
 def find_mistakes(filename):
+    filename.seek(0)
     no_mistakes = 0
 
     spell = SpellChecker()
@@ -272,6 +277,7 @@ def find_mistakes(filename):
 
 
 def find_words(filename):
+    filename.seek(0)
     no_words = 0
     tknzr = TweetTokenizer()
     for i, line in enumerate(filename):
@@ -281,6 +287,7 @@ def find_words(filename):
 
 
 def find_entities(filename):
+    filename.seek(0)
     no_entities = 0
     tknzr = TweetTokenizer()
     for i, line in enumerate(filename):
@@ -298,6 +305,7 @@ def find_entities(filename):
 
 
 def find_pronouns(filename):
+    filename.seek(0)
     no_pronouns = 0
     for i, line in enumerate(filename):
         blob = TextBlob(line)
@@ -325,6 +333,7 @@ def find_pronouns2(filename):
 
 
 def find_repetitions(filename):
+    filename.seek(0)
     no_repetitions = 0
     tknzr = TweetTokenizer()
     d = dict()
@@ -337,6 +346,61 @@ def find_repetitions(filename):
                 d[w] = 1
     return no_repetitions
 
+
+def enhanced_feature_vector(train_files):
+    train_matrix = []
+
+    tknzr = TweetTokenizer()
+    spell = SpellChecker()
+
+    for file in train_files:
+
+        no_repetitions = 0
+        no_pronouns = 0
+        no_entities = 0
+        no_words = 0
+        no_mistakes = 0
+        no_url = 0
+
+        with open(file) as fi:
+            d = dict()
+            for i, line in enumerate(fi):
+                blob = TextBlob(line)
+                blob.parse()
+                url = re.findall('http[s]?\s?:\s?/',
+                                 line)  # 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+] |[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+                if len(url) != 0:
+                    no_url += 1
+
+                line_tok = tknzr.tokenize(line)
+                no_words = len(line_tok)
+                for word in line_tok:
+
+                    correction = spell.correction(word)
+                    if correction != word:
+                        no_mistakes += 1
+
+                    if word in d:
+                        no_repetitions += 1
+                    else:
+                        d[word] = 1
+
+                for w in blob.tags:
+                    if 'PRP' in w[1]:
+                        no_pronouns += 1
+
+                ne_tree = nltk.ne_chunk(nltk.pos_tag(line_tok), binary=True)
+                named_entities = []
+                for tagged_tree in ne_tree:
+                    if hasattr(tagged_tree, 'label'):
+                        entity_name = ' '.join(c[0] for c in tagged_tree.leaves())  #
+                        entity_type = tagged_tree.label()  # get NE category
+                        named_entities.append((entity_name, entity_type))
+                no_entities += len(named_entities)
+
+        train_matrix.append([no_url, no_mistakes, no_words, no_entities, no_repetitions, no_pronouns])
+
+    return train_matrix
 
 def printConfusion(results, true_labels, testName):
     print("The confusion matrix for test {} is".format(testName))
@@ -381,29 +445,31 @@ def run_with_new_features(train_dir, test_dir):
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
 
     classifierArray = [model1, model2, model3, model4]
-    classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    classifierLabels = ["Multinomial", "LinearSVC", "Decision Tree", "Random Forest"]
     train_files, train_labels = get_ham_spam_files(train_dir)
     #train_matrix = [[find_urls(file), find_mistakes(file), find_words(file),
     #                 find_entities(file), find_repetitions(file), find_pronouns(file)] for file in train_files]
-    train_matrix = []
-    for file in train_files:
-        with open(file) as fi:
-            train_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
-                     find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
+    train_matrix = enhanced_feature_vector(train_files)
+    #for file in train_files:
+    #    with open(file) as fi:
+    #        train_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
+    #                 find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
     # Test the unseen mails for Spam
     [test_files, test_labels] = get_ham_spam_files(test_dir)
 
-    test_matrix = []
-    for file in test_files:
-        with open(file) as fi:
-            test_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
-                     find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
+    test_matrix = enhanced_feature_vector(test_files)
+    #for file in test_files:
+    #    with open(file) as fi:
+    #        test_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
+    #                 find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
 
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+
+
 def main():
 
     # Create classifiers
