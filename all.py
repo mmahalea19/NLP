@@ -129,14 +129,14 @@ def extract_idf_features(mail_dir,dictio, filter):  # idf features
     lines = []
     for fil in all_files:
         with open(fil) as fi:
-            for i, line in enumerate(fi):
-                    lines.append(line)
+            preprocessed=removeWords([fi.read()], filter)
+            lines.append(preprocessed[0])
     # lines=["the house had a tiny little mouse",
     #   "the cat saw the mouse",
     #   "the mouse ran away from the house",
     #   "the cat finally ate the mouse",
     #   "the end of the mouse story"]
-    lines = removeWords(lines, filter)
+
     tfidf_vectorizer = TfidfVectorizer(use_idf=True)
 
     # just send in all your docs here
@@ -148,7 +148,7 @@ def extract_idf_features(mail_dir,dictio, filter):  # idf features
                       columns=["tfidf"])
     df.sort_values(by=["tfidf"], ascending=False)
 
-    return tfidf_vectorizer_vectors
+    return tfidf_vectorizer_vectors.todense(),true_labels
 
 
 def LDA_PCA(raw, option, nr_components, labels=None):
@@ -419,7 +419,7 @@ def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     majority_voting(classifiers, classifierLabels, samples, true_labels)
 
 
-def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures,extra_feature_reduction=None):
+def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=None,extra_feature_reduction=None):
     model1 = MultinomialNB()
     model2 = LinearSVC()
     model3 = tree.DecisionTreeClassifier()
@@ -430,17 +430,22 @@ def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures,e
     dictionary = make_Dictionary(train_dir)
 
     [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
-    train_matrix=reduceFeatures(train_matrix,nrfeatures)
-    train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
+    if nrfeatures is not None:
+        train_matrix=reduceFeatures(train_matrix,nrfeatures)
+    if extra_feature_reduction is not None:
+         train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-    filename=filters+"_"+nrfeatures+extra_feature_reduction;
-    with open(filename) as handler:
-        pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCO)
+    filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
+    with open(filename,'wb') as handler:
+        pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
 
     # Test the unseen mails for Spam
     [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
-    test_matrix=LDA_PCA(test_matrix,extra_feature_reduction,10)
-    test_matrix=reduceFeatures(test_matrix,nrfeatures)
+    if nrfeatures is not None:
+        test_matrix=reduceFeatures(test_matrix,nrfeatures)
+    if extra_feature_reduction is not None:
+        test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
+
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 
@@ -492,30 +497,30 @@ def main():
     # Prepare feature vectors per training mail and its labels
 
     filters=[]
-    run_with_filter(train_dir, test_dir,  filters, extract_idf_features,3000)
-    run_with_filter(train_dir, test_dir,  filters, extract_idf_features,2000)
-    run_with_filter(train_dir, test_dir,  filters, extract_idf_features,1000)
-    run_with_filter(train_dir, test_dir,  filters, extract_idf_features,500)
+    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=3000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=2000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=1000)
+    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=500)
     filters = ["stopword"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 500)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
     filters = ["link"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 500)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
     filters = ["symbol"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 500)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
     filters = ["stopword","link","symbol"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 500)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
+    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
 
     filters = []
     run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000, "pca")
