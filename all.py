@@ -257,6 +257,8 @@ def find_mistakes2(filename):
     return no_mistakes
 
 def find_mistakes(filename):
+    no_mistakes = 0
+
     spell = SpellChecker()
     tknzr = TweetTokenizer()
     with open(filename) as fi:
@@ -308,8 +310,9 @@ def find_pronouns(filename):
                 if 'PRP' in w[1]:
                     no_pronouns += 1
     return no_pronouns
-from collections import Counter
+
 def find_pronouns2(filename):
+    from collections import Counter
     no_pronouns = 0
     with open(filename) as fi:
         contet=fi.read()
@@ -318,7 +321,9 @@ def find_pronouns2(filename):
         text = nltk.Text(tokens)
         tags = nltk.pos_tag(text)
         counts = Counter(tag for word, tag in tags)
+        no_pronouns+=counts["PRP"]
         print(1)
+    return no_pronouns
 def find_repetitions(filename):
     no_repetitions = 0
     tknzr = TweetTokenizer()
@@ -387,7 +392,7 @@ def run_with_new_features(train_dir, test_dir):
 
     # Test the unseen mails for Spam
     [test_files, test_labels] = get_ham_spam_files(test_dir)
-    test_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns(file)] for file in test_files]
+    test_matrix = [[find_urls(file),find_mistakes2(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns2(file)] for file in test_files]
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 def main():
