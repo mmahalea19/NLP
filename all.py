@@ -231,10 +231,32 @@ def find_urls(filename):
             if len(url) != 0:
                 no_url += 1
     return no_url
+import pkg_resources
+from symspellpy import SymSpell, Verbosity
+sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+dictionary_path = pkg_resources.resource_filename(
+    "symspellpy", "frequency_dictionary_en_82_765.txt")
+bigram_path = pkg_resources.resource_filename(
+    "symspellpy", "frequency_bigramdictionary_en_243_342.txt")
+# term_index is the column of the term and count_index is the
+# column of the term frequency
+sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1)
+sym_spell.load_bigram_dictionary(bigram_path, term_index=0, count_index=2)
+def find_mistakes2(filename):
+    no_mistakes = 0
+    tknzr = TweetTokenizer()
 
+    import pkg_resources
+    from symspellpy import SymSpell, Verbosity
+    with open(filename) as fi:
+        for i, line in enumerate(fi):
+
+            suggestions = sym_spell.lookup_compound(line, max_edit_distance=2, transfer_casing=True)
+            print(suggestions)
+            no_mistakes+=suggestions[0].distance;
+    return no_mistakes
 
 def find_mistakes(filename):
-    no_mistakes = 0
     spell = SpellChecker()
     tknzr = TweetTokenizer()
     with open(filename) as fi:
@@ -359,7 +381,7 @@ def run_with_new_features(train_dir, test_dir):
     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
     dictionary = make_Dictionary(train_dir)
     train_files, train_labels = get_ham_spam_files(train_dir)
-    train_matrix = [[find_urls(file),find_mistakes(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns2(file)] for file in train_files]
+    train_matrix = [[find_urls(file),find_mistakes2(file),find_words(file),find_entities(file),find_repetitions(file),find_pronouns2(file)] for file in train_files]
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
