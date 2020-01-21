@@ -119,8 +119,21 @@ def reduceFeatures(raw, nrFeats):
         raw = np.delete(raw, index, 1)
     return raw
 
+# def train_idf_vectorizer(lines):
+#     tfidf_vectorizer = TfidfVectorizer(use_idf=True)
+#
+#     # just send in all your docs here
+#     tfidf_vectorizer = tfidf_vectorizer.fit(lines)
+#     # first_vector_tfidfvectorizer = tfidf_vectorizer_vectors[0]
+#
+#     # place tf-idf values in a pandas data frame
+#     # df = pd.DataFrame(first_vector_tfidfvectorizer.T.todense(), index=tfidf_vectorizer.get_feature_names(),
+#     #                   columns=["tfidf"])
+#     # df.sort_values(by=["tfidf"], ascending=False)
+#     vocabulary = tfidf_vectorizer.get_feature_names()
+#     return tfidf_vectorizer
 
-def extract_idf_features(mail_dir,dictio, filter):  # idf features
+def run_vectorizer_idf(vectorizer,mail_dir, filter,train=False):  # idf features
 
     all_files ,true_labels=get_ham_spam_files(mail_dir)
     #labels = np.zeros(len(ham_files) + len(spam_files))
@@ -131,24 +144,13 @@ def extract_idf_features(mail_dir,dictio, filter):  # idf features
         with open(fil) as fi:
             preprocessed=removeWords([fi.read()], filter)
             lines.append(preprocessed[0])
-    # lines=["the house had a tiny little mouse",
-    #   "the cat saw the mouse",
-    #   "the mouse ran away from the house",
-    #   "the cat finally ate the mouse",
-    #   "the end of the mouse story"]
+    if train:
+        vectorizer.fit(lines)
 
-    tfidf_vectorizer = TfidfVectorizer(use_idf=True)
+    vocabulary = vectorizer.get_feature_names()
 
-    # just send in all your docs here
-    tfidf_vectorizer_vectors = tfidf_vectorizer.fit_transform(lines)
-    first_vector_tfidfvectorizer = tfidf_vectorizer_vectors[0]
+    return  vectorizer,vectorizer.transform(lines).todense().getA(),true_labels
 
-    # place tf-idf values in a pandas data frame
-    df = pd.DataFrame(first_vector_tfidfvectorizer.T.todense(), index=tfidf_vectorizer.get_feature_names(),
-                      columns=["tfidf"])
-    df.sort_values(by=["tfidf"], ascending=False)
-
-    return tfidf_vectorizer_vectors.todense(),true_labels
 
 
 def LDA_PCA(raw, option, nr_components, labels=None):
@@ -172,7 +174,19 @@ def get_ham_spam_files(mail_dir):
     all_files = ham_files + spam_files
     return all_files, labels
 
+def extractNormalFeatures(filename,features_matrix,docID,dictio):
+    with open(filename) as fi:
+        content = fi.read().splitlines()
+        content = removeWords(content, filter)
 
+        for line in content:
+            # if i == 2:
+            words = line.split()
+            for word in words:
+                for i, d in enumerate(dictio):
+                    if d[0] == word:
+                        wordID = i
+                        features_matrix[docID, wordID] = words.count(word)
 def extract_features(mail_dir, dictio, filter):  # based of number of occurences of words from dictionary
 
     all_files,true_labels=get_ham_spam_files(mail_dir)
@@ -180,20 +194,9 @@ def extract_features(mail_dir, dictio, filter):  # based of number of occurences
 
     docID = 0
     for fil in all_files:
-        with open(fil) as fi:
-            content = fi.read().splitlines()
-            content = removeWords(content, filter)
+        extractNormalFeatures(fil,features_matrix,docID,dictio)
 
-            for line in content:
-                #if i == 2:
-                words = line.split()
-                for word in words:
-                    for i, d in enumerate(dictio):
-                        if d[0] == word:
-                            wordID = i
-                            features_matrix[docID, wordID] = words.count(word)
-
-            docID = docID + 1
+        docID = docID + 1
     return features_matrix, true_labels
 
 
@@ -419,6 +422,7 @@ def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     majority_voting(classifiers, classifierLabels, samples, true_labels)
 
 
+
 def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=None,extra_feature_reduction=None):
     model1 = MultinomialNB()
     model2 = LinearSVC()
@@ -448,6 +452,45 @@ def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=N
 
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_feature_reduction=None):
+    model1 = GaussianNB()
+    model2 = LinearSVC()
+    model3 = tree.DecisionTreeClassifier()
+    model4 = RandomForestClassifier(max_depth=2, random_state=0)
+
+    classifierArray = [model1, model2, model3, model4]
+    classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    dictionary = make_Dictionary(train_dir)
+    transforme_dic=[item[0] for item in dictionary]
+    vectorizer = TfidfVectorizer(use_idf=True,vocabulary=transforme_dic)
+
+    vectorizer,train_matrix, train_labels = run_vectorizer_idf(vectorizer,train_dir, filters,train=True)
+    if nrfeatures is not None:
+        train_matrix=reduceFeatures(train_matrix,nrfeatures)
+    for row in train_matrix:
+        for i in row:
+            if (i < 0 ):
+                print(i)
+    if extra_feature_reduction is not None:
+         train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
+    for row in train_matrix:
+        for i in row:
+            if (i < 0 ):
+                print(i)
+    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+    filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
+    with open(filename,'wb') as handler:
+        pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
+
+    # Test the unseen mails for Spam
+    vectorizer,test_matrix, test_labels = run_vectorizer_idf(vectorizer,test_dir, filters)
+    if nrfeatures is not None:
+        test_matrix=reduceFeatures(test_matrix,nrfeatures)
+    if extra_feature_reduction is not None:
+        test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
+
+    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 
 def run_with_new_features(train_dir, test_dir):
     model1 = MultinomialNB()
@@ -461,10 +504,6 @@ def run_with_new_features(train_dir, test_dir):
     #train_matrix = [[find_urls(file), find_mistakes(file), find_words(file),
     #                 find_entities(file), find_repetitions(file), find_pronouns(file)] for file in train_files]
     train_matrix = enhanced_feature_vector(train_files)
-    #for file in train_files:
-    #    with open(file) as fi:
-    #        train_matrix.append([find_urls(fi), find_mistakes(fi), find_words(fi),
-    #                 find_entities(fi), find_repetitions(fi), find_pronouns(fi)])
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
 
@@ -496,34 +535,34 @@ def main():
 
     # Prepare feature vectors per training mail and its labels
 
-    filters=[]
-    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=3000)
-    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=2000)
-    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=1000)
-    # run_with_filter(train_dir, test_dir,  filters, extract_idf_features,nrfeatures=500)
-    filters = ["stopword"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
-    filters = ["link"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
-    filters = ["symbol"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
-    filters = ["stopword","link","symbol"]
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=3000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=2000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=1000)
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, nrfeatures=500)
+    # filters=[]
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    # filters = ["stopword"]
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    # filters = ["link"]
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    # filters = ["symbol"]
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    # filters = ["stopword","link","symbol"]
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
 
     filters = []
-    run_with_filter(train_dir, test_dir, filters, extract_idf_features, 3000, "pca")
+    run_with_filter_idf(train_dir, test_dir, filters, extra_feature_reduction="pca")
 
 
 
