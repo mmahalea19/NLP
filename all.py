@@ -13,7 +13,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 import pandas as pd
 import os
 import numpy as np
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, LatentDirichletAllocation
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -157,11 +157,11 @@ def LDA_PCA(raw, option, nr_components, labels=None):
     if option is "pca":
         pca = PCA(n_components=nr_components)
         x_pca = pca.fit_transform(raw)
-        return x_pca
+        return pca,x_pca
     if option is "lda":
-        lda = LDA(n_components=nr_components)
+        lda = LatentDirichletAllocation(n_components=nr_components)
         x_lda = lda.fit_transform(raw, labels)
-        return x_lda
+        return lda,x_lda
     return raw
 
 
@@ -422,63 +422,60 @@ def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     majority_voting(classifiers, classifierLabels, samples, true_labels)
 
 
-
-def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=None,extra_feature_reduction=None):
-    model1 = MultinomialNB()
-    model2 = LinearSVC()
-    model3 = tree.DecisionTreeClassifier()
-    model4 = RandomForestClassifier(max_depth=2, random_state=0)
-
-    classifierArray = [model1, model2, model3, model4]
-    classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
-    dictionary = make_Dictionary(train_dir)
-
-    [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
-    if nrfeatures is not None:
-        train_matrix=reduceFeatures(train_matrix,nrfeatures)
-    if extra_feature_reduction is not None:
-         train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
-    classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-    filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
-    with open(filename,'wb') as handler:
-        pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
-
-    # Test the unseen mails for Spam
-    [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
-    if nrfeatures is not None:
-        test_matrix=reduceFeatures(test_matrix,nrfeatures)
-    if extra_feature_reduction is not None:
-        test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
-
-    # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
-    doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
+#
+# def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=None,extra_feature_reduction=None):
+#     model1 = MultinomialNB()
+#     model2 = LinearSVC()
+#     model3 = tree.DecisionTreeClassifier()
+#     model4 = RandomForestClassifier(max_depth=2, random_state=0)
+#
+#     classifierArray = [model1, model2, model3, model4]
+#     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+#     dictionary = make_Dictionary(train_dir)
+#
+#     [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
+#     if nrfeatures is not None:
+#         train_matrix=reduceFeatures(train_matrix,nrfeatures)
+#     if extra_feature_reduction is not None:
+#          train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
+#     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+#     filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
+#     with open(filename,'wb') as handler:
+#         pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
+#
+#     # Test the unseen mails for Spam
+#     [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
+#     if nrfeatures is not None:
+#         test_matrix=reduceFeatures(test_matrix,nrfeatures)
+#     if extra_feature_reduction is not None:
+#         test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
+#
+#     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
+#     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
 def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_feature_reduction=None):
     model1 = GaussianNB()
     model2 = LinearSVC()
     model3 = tree.DecisionTreeClassifier()
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
+    decomposer=None
 
     classifierArray = [model1, model2, model3, model4]
-    classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    classifierLabels = ["Gaussian", "LinearSVC", "Decision Tree", "Random Forest"]
     dictionary = make_Dictionary(train_dir)
     transforme_dic=[item[0] for item in dictionary]
     vectorizer = TfidfVectorizer(use_idf=True,vocabulary=transforme_dic)
 
     vectorizer,train_matrix, train_labels = run_vectorizer_idf(vectorizer,train_dir, filters,train=True)
+
+
     if nrfeatures is not None:
         train_matrix=reduceFeatures(train_matrix,nrfeatures)
-    for row in train_matrix:
-        for i in row:
-            if (i < 0 ):
-                print(i)
     if extra_feature_reduction is not None:
-         train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
-    for row in train_matrix:
-        for i in row:
-            if (i < 0 ):
-                print(i)
+         decomposer,train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
+
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-    filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
+    filename="./Out/{}_{}_{}".format("_".join(filters),nrfeatures,extra_feature_reduction);
+    serial_data=[classifiers,vectorizer,decomposer]
     with open(filename,'wb') as handler:
         pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -487,7 +484,7 @@ def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_featu
     if nrfeatures is not None:
         test_matrix=reduceFeatures(test_matrix,nrfeatures)
     if extra_feature_reduction is not None:
-        test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
+        test_matrix = decomposer.transform(test_matrix);
 
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
@@ -535,34 +532,35 @@ def main():
 
     # Prepare feature vectors per training mail and its labels
 
-    # filters=[]
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
-    # filters = ["stopword"]
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
-    # filters = ["link"]
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
-    # filters = ["symbol"]
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
-    # filters = ["stopword","link","symbol"]
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
-    # run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    filters=[]
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    filters = ["stopword"]
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    filters = ["link"]
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    filters = ["symbol"]
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
+    filters = ["stopword","link","symbol"]
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=3000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=2000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=1000)
+    run_with_filter_idf(train_dir, test_dir, filters, nrfeatures=500)
 
     filters = []
     run_with_filter_idf(train_dir, test_dir, filters, extra_feature_reduction="pca")
+    run_with_filter_idf(train_dir, test_dir, filters, extra_feature_reduction="lda")
 
 
 
