@@ -107,6 +107,7 @@ def make_Dictionary(train_dir):
 
 def reduceFeatures(raw, nrFeats):
     # min max strategy, cut from both ends until the required number of features
+
     x = True
     while (raw.shape[1] > nrFeats):
         sums = [sum(x) for x in zip(*raw)]
@@ -119,19 +120,6 @@ def reduceFeatures(raw, nrFeats):
         raw = np.delete(raw, index, 1)
     return raw
 
-# def train_idf_vectorizer(lines):
-#     tfidf_vectorizer = TfidfVectorizer(use_idf=True)
-#
-#     # just send in all your docs here
-#     tfidf_vectorizer = tfidf_vectorizer.fit(lines)
-#     # first_vector_tfidfvectorizer = tfidf_vectorizer_vectors[0]
-#
-#     # place tf-idf values in a pandas data frame
-#     # df = pd.DataFrame(first_vector_tfidfvectorizer.T.todense(), index=tfidf_vectorizer.get_feature_names(),
-#     #                   columns=["tfidf"])
-#     # df.sort_values(by=["tfidf"], ascending=False)
-#     vocabulary = tfidf_vectorizer.get_feature_names()
-#     return tfidf_vectorizer
 
 def run_vectorizer_idf(vectorizer,mail_dir, filter,train=False):  # idf features
 
@@ -240,29 +228,6 @@ def find_urls(filename):
     return no_url
 
 
-import pkg_resources
-from symspellpy import SymSpell, Verbosity
-sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
-dictionary_path = pkg_resources.resource_filename(
-    "symspellpy", "frequency_dictionary_en_82_765.txt")
-bigram_path = pkg_resources.resource_filename(
-    "symspellpy", "frequency_bigramdictionary_en_243_342.txt")
-# term_index is the column of the term and count_index is the
-# column of the term frequency
-sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1)
-sym_spell.load_bigram_dictionary(bigram_path, term_index=0, count_index=2)
-def find_mistakes2(filename):
-    no_mistakes = 0
-    tknzr = TweetTokenizer()
-
-    with open(filename) as fi:
-        for i, line in enumerate(fi):
-
-            suggestions = sym_spell.lookup_compound(line, max_edit_distance=2, transfer_casing=True)
-            print(suggestions)
-            no_mistakes+=suggestions[0].distance
-    return no_mistakes
-
 
 def find_mistakes(filename):
     filename.seek(0)
@@ -350,59 +315,65 @@ def find_repetitions(filename):
                 d[w] = 1
     return no_repetitions
 
+def compute_enhanced_vector(message,feature_matrix):
+    no_repetitions = 0
+    no_pronouns = 0
+    no_entities = 0
+    no_words = 0
+    no_mistakes = 0
+    no_url = 0
+    d = dict()
+    tknzr = TweetTokenizer()
+    spell = SpellChecker()
+    for i, line in enumerate(message):
+        blob = TextBlob(line)
+        blob.parse()
+        url = re.findall('http[s]?\s?:\s?/',
+                         line)  # 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+] |[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+        if len(url) != 0:
+            no_url += 1
+
+        line_tok = tknzr.tokenize(line)
+        no_words = len(line_tok)
+        for word in line_tok:
+
+            correction = spell.correction(word)
+            if correction != word:
+                no_mistakes += 1
+
+            if word in d:
+                no_repetitions += 1
+            else:
+                d[word] = 1
+
+        for w in blob.tags:
+            if 'PRP' in w[1]:
+                no_pronouns += 1
+
+        ne_tree = nltk.ne_chunk(nltk.pos_tag(line_tok), binary=True)
+        named_entities = []
+        for tagged_tree in ne_tree:
+            if hasattr(tagged_tree, 'label'):
+                entity_name = ' '.join(c[0] for c in tagged_tree.leaves())  #
+                entity_type = tagged_tree.label()  # get NE category
+                named_entities.append((entity_name, entity_type))
+        no_entities += len(named_entities)
+    feature_matrix.append([no_url, no_mistakes, no_words, no_entities, no_repetitions, no_pronouns])
 
 def enhanced_feature_vector(train_files):
     train_matrix = []
 
-    tknzr = TweetTokenizer()
-    spell = SpellChecker()
 
+    index=0;
     for file in train_files:
+        print("Done {}".format(index/len(train_files)))
+        index+=1
 
-        no_repetitions = 0
-        no_pronouns = 0
-        no_entities = 0
-        no_words = 0
-        no_mistakes = 0
-        no_url = 0
 
         with open(file) as fi:
-            d = dict()
-            for i, line in enumerate(fi):
-                blob = TextBlob(line)
-                blob.parse()
-                url = re.findall('http[s]?\s?:\s?/',
-                                 line)  # 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+] |[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
-                if len(url) != 0:
-                    no_url += 1
+            lines = [line.rstrip() for line in fi]
+            compute_enhanced_vector(lines,train_matrix)
 
-                line_tok = tknzr.tokenize(line)
-                no_words = len(line_tok)
-                for word in line_tok:
-
-                    correction = spell.correction(word)
-                    if correction != word:
-                        no_mistakes += 1
-
-                    if word in d:
-                        no_repetitions += 1
-                    else:
-                        d[word] = 1
-
-                for w in blob.tags:
-                    if 'PRP' in w[1]:
-                        no_pronouns += 1
-
-                ne_tree = nltk.ne_chunk(nltk.pos_tag(line_tok), binary=True)
-                named_entities = []
-                for tagged_tree in ne_tree:
-                    if hasattr(tagged_tree, 'label'):
-                        entity_name = ' '.join(c[0] for c in tagged_tree.leaves())  #
-                        entity_type = tagged_tree.label()  # get NE category
-                        named_entities.append((entity_name, entity_type))
-                no_entities += len(named_entities)
-
-        train_matrix.append([no_url, no_mistakes, no_words, no_entities, no_repetitions, no_pronouns])
 
     return train_matrix
 
@@ -422,37 +393,7 @@ def doStatistics(classifiers, classifierLabels, samples, true_labels, testName):
     majority_voting(classifiers, classifierLabels, samples, true_labels)
 
 
-#
-# def run_with_filter(train_dir, test_dir, filters, feature_extractor,nrfeatures=None,extra_feature_reduction=None):
-#     model1 = MultinomialNB()
-#     model2 = LinearSVC()
-#     model3 = tree.DecisionTreeClassifier()
-#     model4 = RandomForestClassifier(max_depth=2, random_state=0)
-#
-#     classifierArray = [model1, model2, model3, model4]
-#     classifierLabels = ["Muntinomial", "LinearSVC", "Decision Tree", "Random Forest"]
-#     dictionary = make_Dictionary(train_dir)
-#
-#     [train_matrix, train_labels] = feature_extractor(train_dir, dictionary, filters)
-#     if nrfeatures is not None:
-#         train_matrix=reduceFeatures(train_matrix,nrfeatures)
-#     if extra_feature_reduction is not None:
-#          train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
-#     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-#     filename="./Out/"+"_".join(filters)+"_"+str(nrfeatures)+"_"+str(extra_feature_reduction);
-#     with open(filename,'wb') as handler:
-#         pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
-#
-#     # Test the unseen mails for Spam
-#     [test_matrix, test_labels] = feature_extractor(test_dir, dictionary, filters)
-#     if nrfeatures is not None:
-#         test_matrix=reduceFeatures(test_matrix,nrfeatures)
-#     if extra_feature_reduction is not None:
-#         test_matrix = LDA_PCA(test_matrix, extra_feature_reduction, 10)
-#
-#     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
-#     doStatistics(classifiers, classifierLabels, test_matrix, test_labels, "Normal")
-def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_feature_reduction=None):
+def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures="",extra_feature_reduction=""):
     model1 = GaussianNB()
     model2 = LinearSVC()
     model3 = tree.DecisionTreeClassifier()
@@ -460,7 +401,7 @@ def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_featu
     decomposer=None
 
     classifierArray = [model1, model2, model3, model4]
-    classifierLabels = ["Gaussian", "LinearSVC", "Decision Tree", "Random Forest"]
+    classifierLabels = ['Gaussian', 'LinearSVC', 'Decision Tree', 'Random Forest']
     dictionary = make_Dictionary(train_dir)
     transforme_dic=[item[0] for item in dictionary]
     vectorizer = TfidfVectorizer(use_idf=True,vocabulary=transforme_dic)
@@ -468,22 +409,22 @@ def run_with_filter_idf(train_dir, test_dir, filters,nrfeatures=None,extra_featu
     vectorizer,train_matrix, train_labels = run_vectorizer_idf(vectorizer,train_dir, filters,train=True)
 
 
-    if nrfeatures is not None:
+    if nrfeatures is not "":
         train_matrix=reduceFeatures(train_matrix,nrfeatures)
-    if extra_feature_reduction is not None:
+    if extra_feature_reduction is not "":
          decomposer,train_matrix=LDA_PCA(train_matrix,extra_feature_reduction,10)
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
-    filename="./Out/{}_{}_{}".format("_".join(filters),nrfeatures,extra_feature_reduction);
-    serial_data=[classifiers,vectorizer,decomposer]
+    filename="./Out/Bundle_{}_{}_{}_{}".format("_".join(filters),"IDF",nrfeatures,extra_feature_reduction);
+    serial_data=[classifiers,classifierLabels,vectorizer,decomposer]
     with open(filename,'wb') as handler:
-        pickle.dump(classifiers,handler,protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(serial_data,handler,protocol=pickle.HIGHEST_PROTOCOL)
 
     # Test the unseen mails for Spam
     vectorizer,test_matrix, test_labels = run_vectorizer_idf(vectorizer,test_dir, filters)
-    if nrfeatures is not None:
+    if nrfeatures is not "":
         test_matrix=reduceFeatures(test_matrix,nrfeatures)
-    if extra_feature_reduction is not None:
+    if extra_feature_reduction is not "":
         test_matrix = decomposer.transform(test_matrix);
 
     # majority_voting(classifierArray, classifierLabels, test_matrix, test_labels)
@@ -496,13 +437,17 @@ def run_with_new_features(train_dir, test_dir):
     model4 = RandomForestClassifier(max_depth=2, random_state=0)
 
     classifierArray = [model1, model2, model3, model4]
-    classifierLabels = ["Multinomial", "LinearSVC", "Decision Tree", "Random Forest"]
+    classifierLabels = ['Gaussian', 'LinearSVC', 'Decision Tree', 'Random Forest']
     train_files, train_labels = get_ham_spam_files(train_dir)
     #train_matrix = [[find_urls(file), find_mistakes(file), find_words(file),
     #                 find_entities(file), find_repetitions(file), find_pronouns(file)] for file in train_files]
     train_matrix = enhanced_feature_vector(train_files)
 
     classifiers = train_classifiers(classifierArray, train_matrix, train_labels)
+    filename = "./Out/Bundle_{}_{}_{}_{}".format("", "FFeats", "", "");
+    serial_data = [classifiers, classifierLabels, None, None]
+    with open(filename, 'wb') as handler:
+        pickle.dump(serial_data, handler, protocol=pickle.HIGHEST_PROTOCOL)
 
     # Test the unseen mails for Spam
     [test_files, test_labels] = get_ham_spam_files(test_dir)
@@ -570,7 +515,9 @@ def main():
     run_with_new_features(train_dir, test_dir)
 
 
+    exit(0)
 
 
-main()
+if __name__=="__main__":
+    main()
 
